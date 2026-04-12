@@ -1,3 +1,9 @@
+## 🌐 Live Demo
+
+https://event-flow-ai-57448112377.us-central1.run.app/
+
+---
+
 # AI Event Flow Optimizer
 
 An AI-powered system for real-time crowd management and event optimization.
@@ -66,4 +72,4 @@ Deployed on **Google Cloud Run** for scalability and real-time access.
 
 ```bash
 pip install -r requirements.txt
-streamlit run app.py
+streamlit run app.py"# ai-event-flow-optimizer" 
