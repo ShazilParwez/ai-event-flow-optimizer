@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd 
 
-# Define venue layout with specific zones
 VENUE_AREAS = [
     {"name": "Food Court", "x": 80, "y": 80, "radius": 15},
     {"name": "Male Restroom", "x": 20, "y": 85, "radius": 8},

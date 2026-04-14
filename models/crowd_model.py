@@ -1,41 +1,58 @@
-from sklearn.cluster import KMeans
 import warnings
+warnings.filterwarnings("ignore")
+import pandas as pd
+from sklearn.cluster import KMeans
 
 
 def classify_crowd(data):
-    # Suppress sklearn convergence warnings for small datasets
-    warnings.filterwarnings("ignore")
+    # Validation
+    if data is None or data.empty:
+        raise ValueError("Input data is empty")
 
-    # Aggregate density per semantic area
+    if "area_name" not in data.columns or "density" not in data.columns:
+        raise ValueError("Missing required columns")
+
+    # Aggregate density per area
     area_metrics = (
-        data.groupby("area_name")["density"].sum().to_frame(name="total_density")
+        data.groupby("area_name")["density"]
+        .sum()
+        .reset_index(name="total_density")
     )
 
-    # Re-introduce Machine Learning clustering (KMeans)
+    # 🔥 RETURN DICTIONARY INSTEAD OF LIST
+    labels = {}
+
+    for _, row in area_metrics.iterrows():
+        area = row["area_name"]
+        val = row["total_density"]
+
+        if val < 60:
+            labels[area] = "Low"
+        elif val < 120:
+            labels[area] = "Medium"
+        else:
+            labels[area] = "High"
+
+    return labels
+
+    # KMeans clustering
     kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
-    area_metrics["raw_cluster"] = kmeans.fit_predict(area_metrics[["total_density"]])
-
-    # KMeans assigns cluster labels (0, 1, 2) randomly. We must sort them by actual density
-    cluster_means = (
-        area_metrics.groupby("raw_cluster")["total_density"].mean().sort_values()
+    area_metrics["cluster"] = kmeans.fit_predict(
+        area_metrics[["total_density"]]
     )
 
-    # Create an ordered mapping: Lowest -> 0, Middle -> 1, Highest -> 2
-    remap_ordered = {
-        old_label: new_label for new_label, old_label in enumerate(cluster_means.index)
+    # Map clusters → labels
+    cluster_centers = kmeans.cluster_centers_.flatten()
+    sorted_clusters = sorted(
+        enumerate(cluster_centers), key=lambda x: x[1]
+    )
+
+    label_map = {
+        sorted_clusters[0][0]: "Low",
+        sorted_clusters[1][0]: "Medium",
+        sorted_clusters[2][0]: "High",
     }
-    area_metrics["zone_index"] = area_metrics["raw_cluster"].map(remap_ordered)
 
-    # Map area results back to the main point data
-    area_to_index = area_metrics["zone_index"].to_dict()
-    data["zone_index"] = data["area_name"].map(area_to_index)
+    area_metrics["level"] = area_metrics["cluster"].map(label_map)
 
-    # Explicitly override the Walkways (ambient crowd) to safely always be lowest density
-    data.loc[data["area_name"] == "Walkways", "zone_index"] = 0
-
-    # Apply the requested classification map
-    zone_map = {0: "Low Density", 1: "Moderate Density", 2: "High Density / Congested"}
-
-    data["zone_label"] = data["zone_index"].map(zone_map)
-
-    return data
+    return area_metrics["level"].tolist()

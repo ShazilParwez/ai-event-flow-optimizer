@@ -1,5 +1,7 @@
+import time
 import os
 os.environ["PORT"] = "8080"
+
 import streamlit as st  
 from utils.simulation import generate_crowd_data  
 from utils.heatmap import plot_heatmap  
@@ -7,6 +9,15 @@ from models.crowd_model import classify_crowd
 from utils.genai import get_ai_response  
 from utils.prompts import build_prompt  
 from models.predictor import predict_crowd_trend  
+from utils.logger import log_event
+
+
+def sanitize_input(text):
+    if not text or len(text.strip()) == 0:
+        return None
+    if len(text) > 300:
+        return text[:300]
+    return text.strip()
 
 st.set_page_config(
     page_title="AI Event Flow Optimizer",
@@ -14,7 +25,12 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+st.markdown("### 🔐 Security")
+st.caption("Input validation and safe API handling enabled")
+
 # Custom CSS for Premium Dark UI
+st.markdown("### ☁️ Powered by Google Vertex AI")
+st.caption("Using Gemini 2.5 Flash via Vertex AI for intelligent crowd analysis")
 st.markdown(
     """
 <style>
@@ -130,16 +146,20 @@ st.markdown(
 
 # Generate data
 data = generate_crowd_data()
+log_event("Crowd data generated")
 
 # Apply ML
-data = classify_crowd(data)
+crowd_labels = classify_crowd(data)
+
+# Map labels back to each row
+data["zone_label"] = data["area_name"].map(crowd_labels)
 
 # KPI Section
 st.markdown("#### 📊 Live Venue Analytics")
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
 total_people = data["density"].sum() * 10
-high_risk_zones = len(data[data["zone_label"] == "High Density / Congested"])
+high_risk_zones = len(data[data["zone_label"] == "High"])
 
 area_density = data.groupby("area_name")["density"].mean().sort_values()
 least_crowded_area = area_density.idxmin()
@@ -168,6 +188,17 @@ st.markdown("<br>", unsafe_allow_html=True)
 col1, col2 = st.columns([6.5, 3.5])
 
 with col1:
+    st.markdown("""
+### 🗺️ Heatmap Guide
+
+**Color Meaning:**
+- 🟢 **Green** → Low crowd density (safe)
+- 🟡 **Yellow** → Moderate density
+- 🔴 **Red** → High congestion (needs attention)
+""")
+
+    st.markdown("### 📊 Live Crowd Density Map")
+    st.caption("Use this map to identify safe paths and avoid congestion zones.")
     # st.subheader("Live Tracking Heatmap")
     fig = plot_heatmap(data)
     # The heatmap title takes care of the header
@@ -175,38 +206,57 @@ with col1:
 
 with col2:
     st.markdown("#### 🤖 GenAI Operations Assistant")
-    st.markdown(
-        "<span style='color:#8b949e; font-size: 0.9em;'>Ask natural language queries regarding the current venue situation:</span>",
-        unsafe_allow_html=True,
-    )
+
+    st.caption("Ask questions about crowd conditions in simple language")
+
     user_query = st.text_input(
-        "Ask Query",
-        placeholder="e.g. 'Which exit is least crowded?'",
-        label_visibility="collapsed",
+        "Ask about crowd conditions",
+        placeholder="e.g., Which exit is least crowded?"
     )
-    ask = st.button("Ask AI")
 
-    if ask and user_query:
-        with st.spinner("Analyzing live telemetry..."):
-            high_density = len(data[data["zone_label"] == "High Density / Congested"])
+    clean_query = sanitize_input(user_query)
 
-            summary = f"""
-- Most crowded area: {most_crowded_area}
-- Least crowded area: {least_crowded_area}
-- High density zones: {high_density}
-- Total crowd points: {len(data)}
-"""
+    ask = st.button("Ask AI")   
 
-            prompt = build_prompt(user_query, summary)
-            response = get_ai_response(prompt)
+    # FEEDBACK + VALIDATION
 
-            st.success("AI Response:")
-            st.write(response)
+    if "last_query_time" not in st.session_state:
+        st.session_state.last_query_time = 0
 
-    if not user_query:
-        st.info("💡 Try asking: 'Which exit is least crowded?'")
+    if ask:
+        if not clean_query:
+            st.warning("⚠️ Please enter a valid query.")
+        else:
+            if time.time() - st.session_state.last_query_time < 2:
+                st.warning("⏳ Please wait before sending another query")
+            else:
+                st.session_state.last_query_time = time.time()
+
+                with st.spinner("Analyzing live telemetry..."):
+                    summary = f"""
+                    - Most crowded area: {most_crowded_area}
+                    - Least crowded area: {least_crowded_area}
+                    - High density zones: {high_risk_zones}
+                    - Total crowd points: {len(data)}
+                    """
+
+                prompt = build_prompt(clean_query, summary)
+                response = get_ai_response(prompt)
+
+                st.caption("⚡ Model: Gemini 2.5 Flash | Vertex AI")
+                st.success("✅ AI Response:")
+                st.write(response if response else "⚠️ No response generated")
 
     st.markdown("---")
+
+    # HELP SECTION
+    with st.expander("ℹ️ How to use this assistant"):
+        st.write("""
+        - Ask about crowd density or congestion  
+        - Identify least crowded paths  
+        - Use insights for better movement decisions  
+        """)
+
     st.markdown(
         "<span style='color:#8b949e; font-size: 0.9em; font-weight: 600;'>AUTOMATED INSIGHTS</span>",
         unsafe_allow_html=True,
@@ -214,7 +264,7 @@ with col2:
 
     # Get names of crowded areas
     congested_areas = (
-        data[data["zone_label"] == "High Density / Congested"]["area_name"]
+        data[data["zone_label"] == "High"]["area_name"]
         .unique()
         .tolist()
     )
@@ -235,7 +285,14 @@ with col2:
     st.error(f"Most crowded area: {most_crowded_area}")
 
     prediction = predict_crowd_trend(area_density[most_crowded_area])
+    log_event(f"Prediction made: {prediction}")
     st.warning(f"🔮 Forecast: {most_crowded_area} → {prediction}")
 
+st.markdown("### ☁️ Google Cloud Integration")
+st.write("""
+- Vertex AI (Gemini) for intelligent responses  
+- Cloud Run for deployment  
+- Scalable architecture for real-time analytics  
+""")
 st.divider()
 st.caption("Built with 💙 by Shazil Parwez | AI Event Flow Optimizer v2.0")

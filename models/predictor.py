@@ -1,15 +1,22 @@
 def predict_crowd_trend(density):
-    """
-    Simple heuristic:
-    Higher density → longer time to clear
-    Lower density → faster clearing
-    """
+    # Handle single value (float/int)
+    if isinstance(density, (int, float)):
+        if density < 60:
+            return "Fast clearing expected"
+        elif density < 120:
+            return "Moderate crowd movement"
+        else:
+            return "Slow clearing, congestion likely"
 
-    if density > 8:
-        return "Will take ~20-30 minutes to clear"
-    elif density > 5:
-        return "Will take ~10-20 minutes to normalize"
-    elif density > 3:
-        return "Likely to clear in ~5-10 minutes"
+    # Handle list input (for tests)
+    if not density or len(density) == 0:
+        raise ValueError("Density data is empty")
+
+    avg_density = sum(density) / len(density)
+
+    if avg_density < 60:
+        return "Fast clearing expected"
+    elif avg_density < 120:
+        return "Moderate crowd movement"
     else:
-        return "Area is already low density / near empty"
+        return "Slow clearing, congestion likely"

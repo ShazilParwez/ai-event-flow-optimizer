@@ -53,6 +53,16 @@ AI Event Flow Optimizer provides:
 
 ---
 
+## Testing
+
+Unit tests implemented using pytest to validate:
+- Crowd data generation
+- Density classification logic
+- Prediction pipeline
+- Edge cases (empty input, small datasets)
+
+---
+
 ## Deployment
 
 Deployed on **Google Cloud Run** for scalability and real-time access.
