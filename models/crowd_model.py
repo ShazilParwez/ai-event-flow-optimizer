@@ -1,7 +1,7 @@
 import warnings
 warnings.filterwarnings("ignore")
+
 import pandas as pd
-from sklearn.cluster import KMeans
 
 
 def classify_crowd(data):
@@ -12,6 +12,10 @@ def classify_crowd(data):
     if "area_name" not in data.columns or "density" not in data.columns:
         raise ValueError("Missing required columns")
 
+    # NaN validation
+    if data["density"].isnull().any():
+        raise ValueError("Density contains NaN values")
+
     # Aggregate density per area
     area_metrics = (
         data.groupby("area_name")["density"]
@@ -19,7 +23,6 @@ def classify_crowd(data):
         .reset_index(name="total_density")
     )
 
-    # 🔥 RETURN DICTIONARY INSTEAD OF LIST
     labels = {}
 
     for _, row in area_metrics.iterrows():
